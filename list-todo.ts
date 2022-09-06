@@ -201,7 +201,7 @@ function collectItemAndParentIds(items:Map<string,Item>, itemId:string, into:str
 }
 
 // TODO: 'todo' should really be 'shovel ready' -- it's not limited to 'todo' tasks.
-type TaskStatusConstraintName = "all"|"random-todo-task"|"todo";
+type TaskStatusConstraintName = "all"|"random-shovel-ready-task"|"shovel-ready";
 type OutputFormatName = "pretty"|"json";
 
 interface ToDoListingOptions {
@@ -242,17 +242,17 @@ async function main(options:ToDoListingOptions) {
 	for( const [itemId, item] of items ) {
 		if( options.selectionMode == "all" ) {
 			itemIds.push(itemId);
-		} else if( options.selectionMode == "todo" ) {
+		} else if( options.selectionMode == "shovel-ready" ) {
 			if( !itemIsDone(item) ) {
 				itemIds.push(itemId);
 			}
-		} else if( options.selectionMode == "random-todo-task" ) {
+		} else if( options.selectionMode == "random-shovel-ready-task" ) {
 			if( item.typeString == "task" && !itemIsDone(item) ) {
 				itemIds.push(itemId);
 			}
 		}
 	}
-	if( options.selectionMode == "random-todo-task" ) {
+	if( options.selectionMode == "random-shovel-ready-task" ) {
 		itemIds.sort( (a,b) => a == b ? 0 : Math.random() < 0.5 ? -1 : 1 );
 		const taskId = itemIds[0];
 		itemIds = [];
@@ -299,13 +299,14 @@ function parseOptions(args:string[]) : ToDoListingOptions {
 			outputFormat = "pretty";
 		} else if( arg == "-p" ) {
 			outputFormat = "pretty";
-			selectionMode = "random-todo-task";
+			selectionMode = "random-shovel-ready-task";
 		} else if( arg == "--select=all" ) {
 			selectionMode = "all";
-		} else if( arg == "--select=random-todo-task" ) {
-			selectionMode = "random-todo-task";
+		} else if( arg == "--select=random-todo-task" || arg == "--select=random-shovel-ready-task" ) {
+			// '--select=random-todo-task' for backward-combatibility yuk yuk; remove in v0.2.0
+			selectionMode = "random-shovel-ready-task";
 		} else if( arg == "--select=incomplete" ) {
-			selectionMode = "todo";
+			selectionMode = "shovel-ready";
 		} else {
 			console.error(`Error: unrecognized argument ${arg}`);
 			Deno.exit(1);
