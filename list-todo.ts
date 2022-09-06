@@ -108,15 +108,21 @@ Deno.test("phrase translator does what is expected of it", () => {
 });
 
 const phraseTranslator = new PhraseTranslator();
+phraseTranslator.addEnglish('description');
 
 // TODO: Librarify all that boilerplate!
 
+type ItemID = string;
+type TypeString = string;
+type ItemIDListString = string; // Item IDs separated by whitespace and/or commas
+
 interface Item {
-	idString?: string;
-	typeString?: string;
+	idString?: ItemID;
+	typeString?: TypeString;
 	title?: string;
-	subtaskOf?: string;
-	content?: string;
+	subtaskOf?: ItemIDListString;
+	dependsOn?: ItemIDListString;
+	description?: string;
 	status?: string;
 }
 interface ItemEtc extends Item {
@@ -164,7 +170,7 @@ function tefEntryToItem(e : Readonly<TEFEntry> ) : ItemEtc {
 	if( contentLength == 0 ) {
 		// Don't add to object
 	} else if( e.contentChunks.length == 1 ) {
-		obj["content"] = new TextDecoder().decode(e.contentChunks[0]);
+		obj["description"] = new TextDecoder().decode(e.contentChunks[0]);
 	} else {
 		const megabuf = new Uint8Array(contentLength);
 		let len = 0;
@@ -173,7 +179,7 @@ function tefEntryToItem(e : Readonly<TEFEntry> ) : ItemEtc {
 			len += chunk.length;
 		}
 	
-		obj["content"] = new TextDecoder().decode(megabuf);
+		obj["description"] = new TextDecoder().decode(megabuf);
 	}
 	return obj;
 }
@@ -225,18 +231,45 @@ function prettyPrintItem(item:Item) : Promise<void> {
 		(item.title ? " - " + colors.brightWhite(item.title) : '')
 	);
 	for( const k in item ) {
-		if( k == 'typeString' || k == 'idString' || k == 'title' || k == 'content' ) continue;
+		if( k == 'typeString' || k == 'idString' || k == 'title' || k == 'description' ) continue;
 		console.log(`${phraseTranslator.toDashSeparated(k)}: ${(item as ItemEtc)[k]?.replaceAll("\n", ", ")}`);
 	}
-	if( item.content != undefined ) {
+	if( item.description != undefined ) {
 		console.log();
-		console.log(item.content.trim());
+		console.log(item.description.trim());
 	}
 	return Promise.resolve();
 }
 
 function itemIsDone(item:Item) : boolean {
-	return item.status?.startsWith("done") || false;
+	return /^done\b/.exec(item.status ?? 'todo') != null;
+}
+
+function itemIsShovelReady(itemId:ItemID, items:Map<string, Item>) : boolean {
+	const item = items.get(itemId);
+	if( item == undefined ) throw new Error(`Item ${itemId} undefined`);
+
+	if( itemIsDone(item) ) return false;
+
+	// TODO: Anything with /any incomplete subtasks/ should be considered
+	// not-shovel-ready also!
+	// And we should probably annotate the objects
+	// to make it obvious why we include it in the results when they are done
+	// ("all subtasks complete: XXX-123, XXX-345, etc")
+
+	if( item.dependsOn ) {
+		const dependencyIds = item.dependsOn.split(/[,\s]+/);
+		for( const depId of dependencyIds ) {
+			if( depId.length == 0 ) continue;
+			const dep = items.get(depId);
+			if( dep == undefined ) throw new Error(`Item ${depId}, referenced by ${itemId}, undefined`);
+			if( !itemIsDone(dep) ) {
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 async function processMain(options:ProcessToDoList) {
@@ -252,11 +285,11 @@ async function processMain(options:ProcessToDoList) {
 		if( options.selectionMode == "all" ) {
 			itemIds.push(itemId);
 		} else if( options.selectionMode == "shovel-ready" ) {
-			if( !itemIsDone(item) ) {
+			if( itemIsShovelReady(itemId, items) ) {
 				itemIds.push(itemId);
 			}
 		} else if( options.selectionMode == "random-shovel-ready-task" ) {
-			if( item.typeString == "task" && !itemIsDone(item) ) {
+			if( item.typeString == "task" && itemIsShovelReady(itemId, items) ) {
 				itemIds.push(itemId);
 			}
 		}
