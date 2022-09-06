@@ -200,9 +200,13 @@ function collectItemAndParentIds(items:Map<string,Item>, itemId:string, into:str
 	into.push(itemId);
 }
 
+// TODO: 'todo' should really be 'shovel ready' -- it's not limited to 'todo' tasks.
+type TaskStatusConstraintName = "all"|"random-todo-task"|"todo";
+type OutputFormatName = "pretty"|"json";
+
 interface ToDoListingOptions {
-	selectionMode : "all"|"random-todo-task"|"todo";
-	outputFormat : "pretty"|"json";
+	selectionMode : TaskStatusConstraintName;
+	outputFormat : OutputFormatName;
 }
 
 function prettyPrintItem(item:Item) : Promise<void> {
@@ -285,8 +289,8 @@ async function main(options:ToDoListingOptions) {
 }
 
 function parseOptions(args:string[]) : ToDoListingOptions {
-	let selectionMode : "all"|"random-todo-task"|"todo" = "all";
-	let outputFormat : "pretty"|"json" = "json";
+	let selectionMode : TaskStatusConstraintName = "all";
+	let outputFormat : OutputFormatName = "json";
 
 	for( const arg of args ) {
 		if( arg == "--output-format=json" ) {
