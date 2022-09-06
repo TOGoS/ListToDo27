@@ -204,10 +204,19 @@ function collectItemAndParentIds(items:Map<string,Item>, itemId:string, into:str
 type TaskStatusConstraintName = "all"|"random-shovel-ready-task"|"shovel-ready";
 type OutputFormatName = "pretty"|"json";
 
-interface ToDoListingOptions {
+interface ProcessToDoList {
+	actionName : "process";
 	selectionMode : TaskStatusConstraintName;
 	outputFormat : OutputFormatName;
 }
+interface ShowHelp {
+	actionName : "show-help";
+}
+interface ComplainAboutBadArguments {
+	actionName : "complain-about-arguments";
+	errorMessages : string[];
+}
+type LTD27Action = ProcessToDoList|ShowHelp|ComplainAboutBadArguments;
 
 function prettyPrintItem(item:Item) : Promise<void> {
 	console.log("=" +
@@ -230,7 +239,7 @@ function itemIsDone(item:Item) : boolean {
 	return item.status?.startsWith("done") || false;
 }
 
-async function main(options:ToDoListingOptions) {
+async function processMain(options:ProcessToDoList) {
 	const items : Map<string, Item> = new Map();
 	for await( const entry of tefPiecesToEntries(tef.parseTefPieces(readerToIterable(Deno.stdin))) ) {
 		const item = tefEntryToItem(entry);
@@ -288,7 +297,35 @@ async function main(options:ToDoListingOptions) {
 	}
 }
 
-function parseOptions(args:string[]) : ToDoListingOptions {
+const selfName = "list-todo";
+
+function main(action:LTD27Action) : Promise<number> {
+	if( action.actionName == "process" ) {
+		return processMain(action).then( () => 0 );
+	} else if( action.actionName == "show-help" ) {
+		console.log("Welcome to ListToDo27 help!");
+		console.log();
+		console.log("This program reads a TEF file containing your to-do list on standard input");
+		console.log("and outputs selected items.  By default it just converts all items to JSON.")
+		console.log();
+		console.log(`Usage: ${selfName} -r ; shorthand for \`${selfName} --output-format=pretty --select=random-shovel-ready-task\``);
+		console.log("  Do this if you want me to find a random 'shovel-ready' task (status is todo, all dependencies are done)");
+		console.log(`Usage: ${selfName} [--output-format={json|pretty}] [--select={all|random-shovel-ready-task|shovel-ready|`);
+		console.log("  Do this if you want...something else");
+		return Promise.resolve(0);
+	} else if( action.actionName == "complain-about-arguments" ) {
+		for( const m of action.errorMessages ) {
+			console.error(`${selfName}: Error: ${m}`);
+		}
+		console.error(`Try \`${selfName} --help\` for usage information`);
+		return Promise.resolve(1);
+	} else {
+		console.error(`${selfName}: Error: Invalid action: ${(action as any).actionName}`);
+		return Promise.resolve(1);
+	}
+}
+
+function parseOptions(args:string[]) : LTD27Action {
 	let selectionMode : TaskStatusConstraintName = "all";
 	let outputFormat : OutputFormatName = "json";
 
@@ -305,15 +342,22 @@ function parseOptions(args:string[]) : ToDoListingOptions {
 		} else if( arg == "--select=random-todo-task" || arg == "--select=random-shovel-ready-task" ) {
 			// '--select=random-todo-task' for backward-combatibility yuk yuk; remove in v0.2.0
 			selectionMode = "random-shovel-ready-task";
-		} else if( arg == "--select=incomplete" ) {
+		} else if( arg == "--select=incomplete" || arg == "--select=shovel-ready" ) {
 			selectionMode = "shovel-ready";
+		} else if( arg == '--help' ) {
+			return {
+				actionName: "show-help"
+			};
 		} else {
-			console.error(`Error: unrecognized argument ${arg}`);
-			Deno.exit(1);
+			return {
+				actionName: "complain-about-arguments",
+				errorMessages: [`Error: unrecognized argument ${arg}`]
+			}
 		}
 	}
 
 	return {
+		actionName: "process",
 		selectionMode,
 		outputFormat,
 	}
