@@ -21,7 +21,7 @@ Description of Frizzulator project goes here.
 title: Set up Frizzulator project on GitHub
 # Tasks don't have to be part of a parent task or project,
 # but they may be, if that helps you organize things.
-# In the future, list-todo may use this information somehow.
+# In -p mode, parent tasks/projects will also be printed for context.
 subtask-of: FRIZZULATOR
 status: done
 
