@@ -10,7 +10,7 @@ For video demonstration of usage, which includes using the tool to improve itsel
 - [SynthGen Update #5 : list-todo.ts](https://youtu.be/SiKqzO_wIho)
 - [SynthGen Update #5 Part 2: ListToDo27 Workflow Demonstration](https://youtu.be/UqLWNpEVnhM)
 
-## Inut file format
+## Inut File Format
 
 ```tef
 =project FRIZZULATOR
@@ -19,6 +19,9 @@ Description of Frizzulator project goes here.
 
 =task SOME-OTHER-TASK-1
 title: Set up Frizzulator project on GitHub
+# Tasks don't have to be part of a parent task or project,
+# but they may be, if that helps you organize things.
+# In the future, list-todo may use this information somehow.
 subtask-of: FRIZZULATOR
 status: done
 
@@ -37,4 +40,13 @@ depends-on: SOME-OTHER-TASK-1, SOME-OTHER-TASK-2
 
 This task won't show up when you `list-todo -r` until
 SOME-OTHER-TASK-1 and SOME-OTHER-TASK-2 have `status: done`.
+```
+
+## Common Usage
+
+Cat a bunch of to-do lists together and have list-todo pick a task for you
+and print it out pretty:
+
+```sh
+clear && cat my-todo-list.tef /some/other/todo-list.tef | deno run https://deno.land/x/listtodo27@v0.1.3/list-todo.ts -p
 ```
