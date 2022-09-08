@@ -296,9 +296,14 @@ async function processMain(options:ProcessToDoList) {
 	}
 	if( options.selectionMode == "random-shovel-ready-task" ) {
 		itemIds.sort( (a,b) => a == b ? 0 : Math.random() < 0.5 ? -1 : 1 );
-		const taskId = itemIds[0];
-		itemIds = [];
-		collectItemAndParentIds(items, taskId, itemIds);
+		if( itemIds.length == 0 ) {
+			console.warn(`${selfName}: No tasks loaded; can't pick a random item from an empty list!`);
+			return;
+		} else {
+			const taskId = itemIds[0];
+			itemIds = [];
+			collectItemAndParentIds(items, taskId, itemIds);
+		}
 	}
 	
 	if( options.outputFormat == "json" ) {
