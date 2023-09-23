@@ -319,6 +319,9 @@ function isActiveStatus(status:string|undefined, itemId:string) : boolean|undefi
 	}
 }
 
+// Item is 'active' / 'alive', may be considered to be worked on
+// based on its own status and that of parents, but not taking
+// dependencies into account.
 function _itemIsActive(item:Item, items:Map<string,Item>, itemId:string) : boolean {
 	const status = _itemStatus(item);
 
@@ -385,6 +388,9 @@ Deno.test('itemIsActive(loose item with dependency) = true', () => {
 	assert(itemIsActive("TESTTASK-C", testItems));
 });
 
+// Item is ready to be worked on; this is true if it is 'active'
+// (it and parent(s) are not 'cancelled'/'tabled'/'done')
+// *and* it does not depend on any incomplete items.
 function itemIsShovelReady(itemId:ItemID, items:Map<string, Item>) : boolean {
 	const item = items.get(itemId);
 	if( item == undefined ) throw new Error(`Item ${itemId} undefined`);
