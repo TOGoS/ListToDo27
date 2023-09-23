@@ -97,7 +97,7 @@ class PhraseTranslator {
 	}
 }
 
-import { assertEquals } from "https://deno.land/std@0.154.0/testing/asserts.ts";
+import { assert, assertEquals, assertFalse } from "https://deno.land/std@0.154.0/testing/asserts.ts";
 
 Deno.test("phrase translator does what is expected of it", () => {
 	const pt = new PhraseTranslator();
@@ -129,6 +129,13 @@ interface ItemEtc extends Item {
 	[k: string]: string|undefined;
 }
 
+function strToList( str:string|undefined ) : string[] {
+	if( str == undefined ) return [];
+	str = str.trim();
+	if( str.length == 0 ) return [];
+	return str.split(/[,\s]+/);
+}
+
 function tefEntryToItem(e : Readonly<TEFEntry> ) : ItemEtc {
 	// Might want to drive translation based on some schema.
 	// Not yet sure exactly what that would look like.
@@ -140,7 +147,7 @@ function tefEntryToItem(e : Readonly<TEFEntry> ) : ItemEtc {
 	let effectiveIdString : string;
 	let effectiveTitleString : string;
 	let m;
-	if( trimIds && (m = /^(\S+)\s+(?:-\s+|#\s+)?(.*)/.exec(e.idString)) ) {
+	if( trimIds && (m = /^\s*(\S+)\s+(?:-\s+|#\s+)?(.*)/.exec(e.idString)) ) {
 		effectiveIdString = m[1];
 		effectiveTitleString = m[2];
 	} else {
@@ -159,7 +166,7 @@ function tefEntryToItem(e : Readonly<TEFEntry> ) : ItemEtc {
 		if( header.value == "" ) continue;
 		let value = obj[ccKey] ?? "";
 		if( value.length > 0 ) value += "\n";
-		obj[ccKey] = value + header.value;
+		obj[ccKey] = value + header.value.trim();
 	}
 
 	// Stringify content
@@ -184,7 +191,27 @@ function tefEntryToItem(e : Readonly<TEFEntry> ) : ItemEtc {
 	return obj;
 }
 
-
+Deno.test('tefEntryToItem', () => {
+	// I'm not actually sure if the TEF library will, or even should, trim headers.
+	// Actually, I suppose for the sake of preserving data, it should not.
+	// Better make sure that tefEntryToItem does the job.
+	const tefEntry : TEFEntry = {
+		contentChunks: [
+			"foo\n",
+			"bar\n",
+		].map(s => new TextEncoder().encode(s)),
+		headers: [
+			{ key: "status", value: " a choo! " }
+		],
+		typeString: "thingo  ",
+		idString: " blingo - and here is some extra text",
+	};
+	const item = tefEntryToItem(tefEntry);
+	assertEquals("a choo!", item.status);
+	assertEquals("blingo", item.idString);
+	assertEquals("and here is some extra text", item.title);
+	assertEquals("foo\nbar\n", item.description);
+});
 
 import * as colors from 'https://deno.land/std@0.154.0/fmt/colors.ts';
 
@@ -197,11 +224,8 @@ function collectItemAndParentIds(items:Map<string,Item>, itemId:string, into:str
 	if( item == undefined ) {
 		throw new Error(`Referenced item ${itemId} not found in items map!`);
 	}
-	if( item.subtaskOf != undefined ) {
-		const parentIds = item.subtaskOf.split(/,?\s+/);
-		for( const parentId of parentIds ) {
-			collectItemAndParentIds(items, parentId, into);
-		}
+	for( const parentId of strToList(item.subtaskOf) ) {
+		collectItemAndParentIds(items, parentId, into);
 	}
 	into.push(itemId);
 }
@@ -242,44 +266,130 @@ function prettyPrintItem(item:Item) : Promise<void> {
 }
 
 function parseStatus(status:string) : string|undefined {
-	let m = /^(\w+)/.exec(status);
+	const m = /^(\w+)/.exec(status);
 	return (m ? m[1] : undefined);
 }
 
-function itemStatus(item:Item) : string|undefined {
+Deno.test('parseStatus("done")', () => {
+	assertEquals('done', parseStatus('done'));
+});
+
+Deno.test('parseStatus("done" + whitespace)', () => {
+	assertEquals('done', parseStatus('done  \t ')); // just whitespace!
+});
+
+Deno.test('parseStatus("done" + comment)', () => {
+	assertEquals('done', parseStatus('done ; blah, a comment'));
+	assertEquals('done', parseStatus('done (2023-09-23 -- another comment)'));
+	assertEquals('done', parseStatus('done ; whitespace-prefixed??'));
+});
+
+Deno.test('parseStatus(empty string)', () => {
+	assertEquals(undefined, parseStatus(''));
+});
+Deno.test('parseStatus(empty string + comment)', () => {
+	assertEquals(undefined, parseStatus('; foo'));
+	assertEquals(undefined, parseStatus('(bar)'));
+});
+
+
+
+function _itemStatus(item:Item) : string|undefined {
 	return item.status == undefined ? undefined : parseStatus(item.status);
 }
 
-function _itemIsComplete(item:Item, items:Map<string,Item>) : boolean {
-	let status = itemStatus(item);
-	if( status == 'done' || status == 'cancelled' || status == 'tabled' ) return true;
-	if( status == 'todo' || status == 'in-progress' ) return false;
+Deno.test('_itemStatus', () => {
+	assertEquals('done', _itemStatus({status: 'done'}));
+	assertEquals('todo', _itemStatus({status: 'todo'}));
+	assertEquals(undefined, _itemStatus({}));
+	assertEquals(undefined, _itemStatus({status: undefined}));
+});
+
+function isActiveStatus(status:string|undefined, itemId:string) : boolean|undefined {
+	switch( status ) {
+	case 'todo': case 'in-progress':
+		return true;
+	case 'done': case 'cancelled': case 'tabled':
+		return false;
+	case undefined:
+		return undefined;
+	default:
+		console.warn(`Unrecognized status '${status}' on item '${itemId}'`);
+		return undefined;
+	}
+}
+
+function _itemIsActive(item:Item, items:Map<string,Item>, itemId:string) : boolean {
+	const status = _itemStatus(item);
+
+	// If the item is explicitly marked as active or not, return that
+	const explicitlyActive = isActiveStatus(status, itemId);
+	if( explicitlyActive != undefined ) return explicitlyActive;
 
 	// Otherwise...check the parents
-	if( item.subtaskOf != undefined ) {
-		const parentIds = item.subtaskOf.split(/,?\s+/);
-		for( const parentId of parentIds ) {
-			if( !itemIsComplete(parentId, items) ) return false;
-		}
-		// All parents are complete, so consider this subtask
-		// complete even though not explicitly marked as such!
-		return true;
+	const parentIds = strToList(item.subtaskOf);
+	for( const parentId of parentIds ) {
+		// If any parent is active, the item is active
+		if( itemIsActive(parentId, items) ) return true;
 	}
-	
-	return false;
+
+	// If the item has any parents, and none are active, then the item is inactive.
+	// If it has no parents, then by default treat it as active.
+	return parentIds.length == 0;
 }
 
-function itemIsComplete(itemId:ItemID, items:Map<string, Item>) : boolean {
+function itemIsActive(itemId:ItemID, items:Map<string, Item>) : boolean {
 	const item = items.get(itemId);
-	if( item == undefined ) throw new Error(`Item ${itemId} undefined`);
-	return _itemIsComplete(item, items);
+	if( item == undefined ) throw new Error(`itemIsActive('${itemId}'): No such item`);
+	return _itemIsActive(item, items, itemId);
 }
+
+const testItems = new Map<string,Item>([
+	["TESTPROJECT-A", {
+		status: "tabled (for now)"
+	}],
+	["TESTTASK-AA", {
+		subtaskOf: "TESTPROJECT-A",
+	}],
+	["TESTTASK-AB", {
+		subtaskOf: "TESTPROJECT-A",
+		status: "todo",
+	}],
+	["TESTTASK-B", {
+		subtaskOf: "",
+	}],
+	["TESTTASK-C", {
+		subtaskOf: "",
+		dependsOn: "TESTTASK-B",
+	}],
+	["TESTTASK-D", {
+		subtaskOf: "",
+		dependsOn: "TESTPROJECT-A",
+		description: "Depends on a cancelled task; a funny edge case that should be reported!",
+	}],
+]);
+
+Deno.test('itemIsActive(tabled item) = false', () => {
+	assertFalse(itemIsActive("TESTPROJECT-A", testItems));
+});
+Deno.test('itemIsActive(subtask of tabled item) = false', () => {
+	assertFalse(itemIsActive("TESTTASK-AA", testItems));
+});
+Deno.test('itemIsActive(explicitly "todo" subtask of tabled item) = true', () => {
+	assert(itemIsActive("TESTTASK-AB", testItems));
+});
+Deno.test('itemIsActive(loose item) = true', () => {
+	assert(itemIsActive("TESTTASK-B", testItems));
+});
+Deno.test('itemIsActive(loose item with dependency) = true', () => {
+	assert(itemIsActive("TESTTASK-C", testItems));
+});
 
 function itemIsShovelReady(itemId:ItemID, items:Map<string, Item>) : boolean {
 	const item = items.get(itemId);
 	if( item == undefined ) throw new Error(`Item ${itemId} undefined`);
 	
-	if( _itemIsComplete(item, items) ) return false;
+	if( !_itemIsActive(item, items, itemId) ) return false;
 	
 	// TODO: Anything with /any incomplete subtasks/ should be considered
 	// not-shovel-ready also!
@@ -287,23 +397,40 @@ function itemIsShovelReady(itemId:ItemID, items:Map<string, Item>) : boolean {
 	// to make it obvious why we include it in the results when they are done
 	// ("all subtasks complete: XXX-123, XXX-345, etc")
 	
-	if( item.dependsOn ) {
-		const dependencyIds = item.dependsOn.split(/[,\s]+/);
-		for( const depId of dependencyIds ) {
-			if( depId.length == 0 ) continue;
-			const dep = items.get(depId);
-			if( dep == undefined ) throw new Error(`Item ${depId}, referenced by ${itemId}, undefined`);
-			let depStatus = itemStatus(dep);
-			if( depStatus == 'cancelled' ) {
-				console.warn(`${itemId} depends on ${depId}, but that task is cancelled!`);
-			} if( depStatus != 'done' ) {
-				return false;
-			}
+	for( const depId of strToList(item.dependsOn) ) {
+		const dep = items.get(depId);
+		if( dep == undefined ) throw new Error(`Item ${depId}, referenced by ${itemId}, undefined`);
+		if( _itemStatus(dep) == 'done' ) {
+			continue;
 		}
+		if( !_itemIsActive(dep, items, depId) ) {
+			console.warn(`${itemId} depends on ${depId}, but that one is inactive without being marked 'done'!`);
+		}
+		return false;
 	}
 
 	return true;
 }
+
+Deno.test('itemIsShovelReady(tabled project) = false', () => {
+	assertFalse(itemIsShovelReady("TESTPROJECT-A", testItems));
+});
+Deno.test('itemIsShovelReady(subtask of tabled project) = false', () => {
+	assertFalse(itemIsShovelReady("TESTTASK-AA", testItems));
+});
+Deno.test('itemIsShovelReady(explicitly "todo" subtask of tabled project) = true', () => {
+	assert(itemIsShovelReady("TESTTASK-AB", testItems));
+});
+Deno.test('itemIsShovelReady(loose task) = true', () => {
+	assert(itemIsShovelReady("TESTTASK-B", testItems));
+});
+Deno.test('itemIsShovelReady(task depending on an incomplete task) = false', () => {
+	assertFalse(itemIsShovelReady("TESTTASK-C", testItems));
+});
+Deno.test('itemIsShovelReady(task depending on a cancelled project) = false', () => {
+	assertFalse(itemIsShovelReady("TESTTASK-D", testItems));
+});
+
 
 // TODO: Unit tests for itemIsComplete, itemIsShovelReady, etc.
 
@@ -393,7 +520,7 @@ function main(action:LTD27Action) : Promise<number> {
 		console.error(`Try \`${selfName} --help\` for usage information`);
 		return Promise.resolve(1);
 	} else {
-		console.error(`${selfName}: Error: Invalid action: ${(action as any).actionName}`);
+		console.error(`${selfName}: Error: Invalid action:`, action);
 		return Promise.resolve(1);
 	}
 }
