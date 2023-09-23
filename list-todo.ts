@@ -242,11 +242,14 @@ interface ProcessToDoList {
 interface ShowHelp {
 	actionName : "show-help";
 }
+interface ShowMoreHelp {
+	actionName : "show-more-help";
+}
 interface ComplainAboutBadArguments {
 	actionName : "complain-about-arguments";
 	errorMessages : string[];
 }
-type LTD27Action = ProcessToDoList|ShowHelp|ComplainAboutBadArguments;
+type LTD27Action = ProcessToDoList|ShowHelp|ShowMoreHelp|ComplainAboutBadArguments;
 
 function prettyPrintItem(item:Item) : Promise<void> {
 	console.log("=" +
@@ -505,26 +508,50 @@ async function processMain(options:ProcessToDoList) {
 
 const selfName = "list-todo";
 
+function getBasicHelpText(selfName:string) : string {
+	return (
+		"Welcome to ListToDo27 help!\n" +
+		"\n" +
+		"This program reads a TEF file containing your to-do list on standard input\n" + 
+		"and outputs selected items.  By default it just converts all items to JSON.\n" +
+		"\n" +
+		`Usage: ${selfName} -r ; shorthand for \`${selfName} --output-format=pretty --select=random-shovel-ready-task\`\n` +
+		"  Do this if you want me to find a random 'shovel-ready' task (status is todo, all dependencies are done)\n" +
+		`Usage: ${selfName} [--output-format={json|pretty}] [--select={all|random-shovel-ready-task|shovel-ready|\n` +
+		"  Do this if you want...something else\n"
+	);
+}
+
 function main(action:LTD27Action) : Promise<number> {
 	if( action.actionName == "process" ) {
 		return processMain(action).then( () => 0 );
 	} else if( action.actionName == "show-help" ) {
-		console.log("Welcome to ListToDo27 help!");
-		console.log();
-		console.log("This program reads a TEF file containing your to-do list on standard input");
-		console.log("and outputs selected items.  By default it just converts all items to JSON.")
-		console.log();
-		console.log(`Usage: ${selfName} -r ; shorthand for \`${selfName} --output-format=pretty --select=random-shovel-ready-task\``);
-		console.log("  Do this if you want me to find a random 'shovel-ready' task (status is todo, all dependencies are done)");
-		console.log(`Usage: ${selfName} [--output-format={json|pretty}] [--select={all|random-shovel-ready-task|shovel-ready|`);
-		console.log("  Do this if you want...something else");
-		console.log()
+		console.log(getBasicHelpText(selfName));
+		console.log("Run with --more-help for more help.");
+		return Promise.resolve(0);
+	} else if( action.actionName == "show-more-help" ) {
+		console.log(getBasicHelpText(selfName));
 		console.log("The following 'status'es are recognized:");
 		console.log("- todo         ; yet to be done (the default if no status is specified)");
 		console.log("- in-progress  ; currently being worked on");
 		console.log("- cancelled    ; let's ignore it forever");
 		console.log("- tabled       ; let's ignore it for now");
 		console.log("- done         ; it has been done");
+		console.log();
+		console.log("Entry format:");
+		console.log("  =task MY-TASK-123");
+		console.log("  title: My Super-Duper Task That I Plan To Finish Soon!");
+		console.log("  created: 2023-09-15 ; because I was so bored lol");
+		console.log("  subtask-of: MY-PROJECT-101");
+		console.log("  depends-on: MY-TASK-102");
+		console.log("  status: todo");
+		console.log("  ");
+		console.log("  This is a description of the task.");
+		console.log("  It can contain multiple lines.");
+		console.log("  ");
+		console.log("  =task MY-TASK-234 - With Alternative Title Style");
+		console.log("  ");
+		console.log("  This one shows a more compact way to indicate title");
 		console.log();
 		console.log("Status lines may contain comments:");
 		console.log("  status: done (2023-09-23) ; statuses are often followed by a date");
@@ -563,9 +590,9 @@ function parseOptions(args:string[]) : LTD27Action {
 		} else if( arg == "--select=incomplete" || arg == "--select=shovel-ready" ) {
 			selectionMode = "shovel-ready";
 		} else if( arg == '--help' ) {
-			return {
-				actionName: "show-help"
-			};
+			return { actionName: "show-help" };
+		} else if( arg == '--more-help' ) {
+			return { actionName: "show-more-help" };
 		} else {
 			return {
 				actionName: "complain-about-arguments",
