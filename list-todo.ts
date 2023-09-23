@@ -241,16 +241,24 @@ function prettyPrintItem(item:Item) : Promise<void> {
 	return Promise.resolve();
 }
 
-function itemIsDone(item:Item) : boolean {
-	return /^done\b/.exec(item.status ?? 'todo') != null;
+function parseStatus(status:string) : string|undefined {
+	let m = /^(\w+)/.exec(status);
+	return (m ? m[1] : undefined);
+}
+
+function itemStatus(item:Item) {
+	return parseStatus(item.status ?? 'todo');
 }
 
 function itemIsShovelReady(itemId:ItemID, items:Map<string, Item>) : boolean {
 	const item = items.get(itemId);
 	if( item == undefined ) throw new Error(`Item ${itemId} undefined`);
 
-	if( itemIsDone(item) ) return false;
-
+	let status = itemStatus(item);
+	if( status == 'done' || status == 'cancelled' ) {
+		return false;
+	}
+	
 	// TODO: Anything with /any incomplete subtasks/ should be considered
 	// not-shovel-ready also!
 	// And we should probably annotate the objects
@@ -263,7 +271,10 @@ function itemIsShovelReady(itemId:ItemID, items:Map<string, Item>) : boolean {
 			if( depId.length == 0 ) continue;
 			const dep = items.get(depId);
 			if( dep == undefined ) throw new Error(`Item ${depId}, referenced by ${itemId}, undefined`);
-			if( !itemIsDone(dep) ) {
+			let depStatus = itemStatus(dep);
+			if( depStatus == 'cancelled' ) {
+				console.warn(`${itemId} depends on ${depId}, but that task is cancelled!`);
+			} if( depStatus != 'done' ) {
 				return false;
 			}
 		}
