@@ -252,7 +252,7 @@ function itemStatus(item:Item) : string|undefined {
 
 function _itemIsComplete(item:Item, items:Map<string,Item>) : boolean {
 	let status = itemStatus(item);
-	if( status == 'done' || status == 'cancelled' ) return true;
+	if( status == 'done' || status == 'cancelled' || status == 'tabled' ) return true;
 	if( status == 'todo' || status == 'in-progress' ) return false;
 
 	// Otherwise...check the parents
