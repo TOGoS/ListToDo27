@@ -246,25 +246,47 @@ function parseStatus(status:string) : string|undefined {
 	return (m ? m[1] : undefined);
 }
 
-function itemStatus(item:Item) {
-	return parseStatus(item.status ?? 'todo');
+function itemStatus(item:Item) : string|undefined {
+	return item.status == undefined ? undefined : parseStatus(item.status);
+}
+
+function _itemIsComplete(item:Item, items:Map<string,Item>) : boolean {
+	let status = itemStatus(item);
+	if( status == 'done' || status == 'cancelled' ) return true;
+	if( status == 'todo' || status == 'in-progress' ) return false;
+
+	// Otherwise...check the parents
+	if( item.subtaskOf != undefined ) {
+		const parentIds = item.subtaskOf.split(/,?\s+/);
+		for( const parentId of parentIds ) {
+			if( !itemIsComplete(parentId, items) ) return false;
+		}
+		// All parents are complete, so consider this subtask
+		// complete even though not explicitly marked as such!
+		return true;
+	}
+	
+	return false;
+}
+
+function itemIsComplete(itemId:ItemID, items:Map<string, Item>) : boolean {
+	const item = items.get(itemId);
+	if( item == undefined ) throw new Error(`Item ${itemId} undefined`);
+	return _itemIsComplete(item, items);
 }
 
 function itemIsShovelReady(itemId:ItemID, items:Map<string, Item>) : boolean {
 	const item = items.get(itemId);
 	if( item == undefined ) throw new Error(`Item ${itemId} undefined`);
-
-	let status = itemStatus(item);
-	if( status == 'done' || status == 'cancelled' ) {
-		return false;
-	}
+	
+	if( _itemIsComplete(item, items) ) return false;
 	
 	// TODO: Anything with /any incomplete subtasks/ should be considered
 	// not-shovel-ready also!
 	// And we should probably annotate the objects
 	// to make it obvious why we include it in the results when they are done
 	// ("all subtasks complete: XXX-123, XXX-345, etc")
-
+	
 	if( item.dependsOn ) {
 		const dependencyIds = item.dependsOn.split(/[,\s]+/);
 		for( const depId of dependencyIds ) {
@@ -282,6 +304,8 @@ function itemIsShovelReady(itemId:ItemID, items:Map<string, Item>) : boolean {
 
 	return true;
 }
+
+// TODO: Unit tests for itemIsComplete, itemIsShovelReady, etc.
 
 async function processMain(options:ProcessToDoList) {
 	const items : Map<string, Item> = new Map();
