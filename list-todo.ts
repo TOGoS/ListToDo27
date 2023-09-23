@@ -518,6 +518,18 @@ function main(action:LTD27Action) : Promise<number> {
 		console.log("  Do this if you want me to find a random 'shovel-ready' task (status is todo, all dependencies are done)");
 		console.log(`Usage: ${selfName} [--output-format={json|pretty}] [--select={all|random-shovel-ready-task|shovel-ready|`);
 		console.log("  Do this if you want...something else");
+		console.log()
+		console.log("The following 'status'es are recognized:");
+		console.log("- todo         ; yet to be done (the default if no status is specified)");
+		console.log("- in-progress  ; currently being worked on");
+		console.log("- cancelled    ; let's ignore it forever");
+		console.log("- tabled       ; let's ignore it for now");
+		console.log("- done         ; it has been done");
+		console.log();
+		console.log("Status lines may contain comments:");
+		console.log("  status: done (2023-09-23) ; statuses are often followed by a date");
+		console.log("  status: done ; semicolon is customary for starting commentary");
+		console.log("  status: done # hash less so, but might be okay");
 		return Promise.resolve(0);
 	} else if( action.actionName == "complain-about-arguments" ) {
 		for( const m of action.errorMessages ) {
