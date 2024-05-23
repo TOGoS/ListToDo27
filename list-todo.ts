@@ -269,7 +269,7 @@ function prettyPrintItem(item:Item) : Promise<void> {
 }
 
 function parseStatus(status:string) : string|undefined {
-	const m = /^(\w+)/.exec(status);
+	const m = /^([\w-_]+)/.exec(status);
 	return (m ? m[1] : undefined);
 }
 
@@ -295,6 +295,14 @@ Deno.test('parseStatus(empty string + comment)', () => {
 	assertEquals(undefined, parseStatus('(bar)'));
 });
 
+Deno.test('parseStatus("in-progress")', () => {
+	assertEquals('in-progress', parseStatus('in-progress'));
+});
+Deno.test('parseStatus("in-progress" + stuff)', () => {
+	assertEquals('in-progress', parseStatus('in-progress ; foo'));
+	assertEquals('in-progress', parseStatus('in-progress (bar)'));
+	assertEquals('in-progress', parseStatus('in-progress whatever'));
+});
 
 
 function _itemStatus(item:Item) : string|undefined {
