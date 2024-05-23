@@ -10,7 +10,7 @@ For video demonstration of usage, which includes using the tool to improve itsel
 - [SynthGen Update #5 : list-todo.ts](https://youtu.be/SiKqzO_wIho)
 - [SynthGen Update #5 Part 2: ListToDo27 Workflow Demonstration](https://youtu.be/UqLWNpEVnhM)
 
-## Inut File Format
+## Input File Format
 
 ```tef
 =project FRIZZULATOR
