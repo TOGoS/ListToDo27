@@ -159,16 +159,43 @@ function tefEntryToItem(e : Readonly<TEFEntry> ) : ItemEtc {
 	if( effectiveIdString != "" ) obj.idString = effectiveIdString;
 	if( effectiveTitleString != "" ) obj.title = effectiveTitleString;
 	if( e.typeString != "" ) obj.typeString = e.typeString;
+	
+	// I don't feel like building out the whole relational model
+	// whatever right now, so here's a hack to handle my
+	// `status/${whatever}: ...` lines:
+	let latestStatus = undefined;
+	
 	for( const header of e.headers ) {
-		phraseTranslator.addDashed(header.key);
-		const ccKey = phraseTranslator.toCamelCase(header.key);
+		let key = header.key;
+		let value = header.value;
+
+		let m : RegExpExecArray|null;
+		if( (m = /^status\/(.*)/.exec(key)) !== null ) {
+			obj.statusUpdates
+			key = 'statusUpdates';
+			latestStatus = `${value} (${m[1]})`;
+			continue;
+		}
+		
+		phraseTranslator.addDashed(key);
+		
+		if( key == 'status' ) {
+			latestStatus = value;
+			continue;
+		}
+		
+		const ccKey = phraseTranslator.toCamelCase(key);
 
 		if( header.value == "" ) continue;
-		let value = obj[ccKey] ?? "";
-		if( value.length > 0 ) value += "\n";
-		obj[ccKey] = value + header.value.trim();
+		let oldValue = obj[ccKey] ?? "";
+		if( oldValue.length > 0 ) oldValue += "\n";
+		obj[ccKey] = oldValue + value.trim();
 	}
-
+	
+	if( latestStatus != undefined ) {
+		obj.status = latestStatus;
+	}
+	
 	// Stringify content
 	let contentLength = 0;
 	for( const chunk of e.contentChunks ) {
@@ -211,6 +238,26 @@ Deno.test('tefEntryToItem', () => {
 	assertEquals("blingo", item.idString);
 	assertEquals("and here is some extra text", item.title);
 	assertEquals("foo\nbar\n", item.description);
+});
+
+Deno.test('tefEntryWithDateKeyedStatusesToItem', () => {
+	const tefEntry : TEFEntry = {
+		contentChunks: [
+			"foo\n",
+			"bar\n",
+		].map(s => new TextEncoder().encode(s)),
+		headers: [
+			{ key: "status/foo", value: "todo" },
+			{ key: "status/2003-01-27", value: "tabled" },
+			{ key: "status/2025-01-27", value: "todo (because I finally have the thing for it)" },
+			{ key: "status/2025-01-30", value: "don3 (finally!)" },
+		],
+		typeString: "task",
+		idString: "look-at-these-status-updates",
+	};
+	const item = tefEntryToItem(tefEntry);
+	assertEquals("don3 (finally!) (2025-01-30)", item.status);
+	assertEquals("look-at-these-status-updates", item.idString);
 });
 
 import * as colors from 'https://deno.land/std@0.154.0/fmt/colors.ts';
